@@ -24,6 +24,11 @@ FIXME: listing of options this app accepts.
 
 ...
 
+
+### TODO:
+
+ - work with exception handling
+
 ### Any Other Sections
 ### That You Think
 ### Might be Useful
