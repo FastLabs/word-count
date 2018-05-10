@@ -1,6 +1,7 @@
 (ns word-count.core
   (:gen-class)
   (:require [clojure.string :as str]
+            [clojure.java.io :as io]
             [clojure.core.async :as ay]))
 
 (defn- split-words [sentence]
@@ -30,11 +31,35 @@
       (ay/close! split-chan))))
 
 
-(defn simple-split [file]
-  (prn "simple split" file))
+(defn split-words-seq [line-seq]
+  (->> (map split-words line-seq)
+       (mapcat identity)))
 
-(defn stats-split [file]
-  (prn "stats split" file))
+
+(defn simple-split
+  "The simplest way to count the words from file"
+  [file]
+  (with-open [f-reader (io/reader file)]
+    (-> (line-seq f-reader)
+        (split-words-seq)
+        count)))
+
+
+(defn split-char-seq
+  "Takes"
+  [w-seq]
+  (mapcat identity w-seq)) ;TODO filter only required chars
+
+(defn stats-split
+  "Word count with additional statistics"
+  [file]
+  (with-open [f-reader (io/reader file)]
+    (let [l-seq (line-seq f-reader)
+          w-seq (split-words-seq l-seq)]
+      (-> {}
+          (assoc :lines (count l-seq))
+          (assoc :words (count w-seq))
+          (assoc :chars (count (split-char-seq w-seq)))))))
 
 (defn parallel-split [file]
   (prn "parallel split" file))
@@ -53,6 +78,6 @@
 (defn -main
   "I don't do a whole lot ... yet."
   [& args]
-  (let [cmd (if (= 1 (count args) ) (concat ["--word-count"] args) args)]
+  (let [cmd (if (= 1 (count args)) (concat ["--word-count"] args) args)]
     (dispatch-cmd cmd)))
 
