@@ -2,6 +2,7 @@
   (:gen-class)
   (:require [clojure.string :as str]
             [clojure.java.io :as io]
+            [word-count.file-reader :as f-reader]
             [clojure.core.async :as ay]))
 
 (defn- split-words [sentence]
@@ -18,19 +19,6 @@
 (defn word-count-async [word-chan]
   (ay/reduce inc-item {} word-chan))
 
-(defn test-split []
-  (let [split-chan (ay/chan)
-        res-chan (-> split-chan
-                     split-words-async
-                     word-count-async)]
-    (ay/go-loop []
-      (when-let [result (ay/<! res-chan)]
-        (prn result)
-        (recur)))
-    (when (ay/put! split-chan "abc cde efg hij abc")
-      (ay/close! split-chan))))
-
-
 (defn split-words-seq [line-seq]
   (->> (map split-words line-seq)
        (mapcat identity)))
@@ -44,11 +32,18 @@
         (split-words-seq)
         count)))
 
+(defn nice-char? [ch]
+  (let [ascii (int ch)]
+    (or
+      (and (>= ascii (int \a)) (<= ascii (int \z)))
+      (and (>= ascii (int \A)) (<= ascii (int \Z)))
+      (and (>= ascii (int \0)) (<= ascii (int \9))))))
 
 (defn split-char-seq
   "Takes"
   [w-seq]
-  (mapcat identity w-seq)) ;TODO filter only required chars
+  (->> (mapcat identity w-seq)
+       (filter nice-char?)))
 
 (defn stats-split
   "Word count with additional statistics"
@@ -61,14 +56,31 @@
           (assoc :words (count w-seq))
           (assoc :chars (count (split-char-seq w-seq)))))))
 
+(defn frequency-split
+  [file]
+  (with-open [f-reader (io/reader file)]
+    (->> (line-seq f-reader)
+         split-words-seq
+         (group-by identity)
+         (map (fn [[word group]] [word (count group)])))))
+
 (defn parallel-split [file]
-  (prn "parallel split" file))
+  (ay/<!!
+    (-> (f-reader/line-reader-chan file)
+        split-words-async
+        word-count-async)))
 
 (defmulti dispatch-cmd first :default "--word-count")
+
 (defmethod dispatch-cmd "--word-count" [[_ file-name]]
   (simple-split file-name))
+
 (defmethod dispatch-cmd "--all" [[_ file-name]]
   (stats-split file-name))
+
+(defmethod dispatch-cmd "--frequencies" [[_ file-name]]
+  (frequency-split file-name))
+
 (defmethod dispatch-cmd "--parallel" [[_ file-name]]
   (parallel-split file-name))
 
@@ -76,8 +88,7 @@
 
 
 (defn -main
-  "I don't do a whole lot ... yet."
   [& args]
   (let [cmd (if (= 1 (count args)) (concat ["--word-count"] args) args)]
-    (dispatch-cmd cmd)))
+    (prn (dispatch-cmd cmd))))
 
